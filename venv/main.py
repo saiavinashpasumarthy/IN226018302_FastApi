@@ -119,7 +119,6 @@ def get_deals():
         "best_deal": cheapest,
         "premium_pick": expensive
     }
-
 # Product by ID 
 @app.get('/products/{product_id}')
 def get_product(product_id: int):
@@ -350,4 +349,58 @@ def confirm_order(order_id: int):
     return {
         "message": "Order confirmed",
         "order": order
+    }
+# Day 3 endpoints
+#post 2 new products
+class Product(BaseModel):
+    id: Optional[int] = None
+    name: str = Field(..., min_length=2)
+    price: int = Field(..., gt=0)
+    category: str = Field(..., min_length=2)
+    in_stock: bool = Field(...)
+@app.post("/products")
+def add_product(product: Product):
+    new_product = product.model_dump()
+    new_product["id"] = max(p["id"] for p in products) + 1
+    
+
+    products.append(new_product)
+    #400 bad request if duplicate name exists
+    if any(p["name"] == new_product["name"] for p in products if p["id"] != new_product["id"]):
+        return {"error": "Product with this name already exists"}
+
+    return {
+        "message": "Product added successfully",
+        "product": new_product
+    }
+#UPDATE STOCK INFO and Price of a product
+@app.put("/products/{product_id}/stock")
+def update_stock(product_id: int, in_stock: bool = Query(...), price: int = Query(...)):
+
+    product = next((p for p in products if p["id"] == product_id), None)
+
+    if product is None:
+        return {"error": "Product not found"}
+
+    product["in_stock"] = in_stock
+    product["price"] = price
+
+    return {
+        "message": "Stock status updated",
+        "product": product
+    }
+@app.delete("/products/{product_id}")
+def delete_product(product_id: int):
+
+    global products
+    product = next((p for p in products if p["id"] == product_id), None)
+
+    if product is None:
+        return {"error": "Product not found"}
+
+    products = [p for p in products if p["id"] != product_id]
+
+    return {
+        "message": "Product deleted successfully",
+        "deleted_product": product
     }
