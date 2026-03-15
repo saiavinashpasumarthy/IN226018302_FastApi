@@ -119,6 +119,30 @@ def get_deals():
         "best_deal": cheapest,
         "premium_pick": expensive
     }
+@app.get("/audit")
+def products_audit():
+
+    total_products = len(products)
+
+    in_stock_products = [p for p in products if p["in_stock"]]
+    in_stock_count = len(in_stock_products)
+
+    out_of_stock_names = [p["name"] for p in products if not p["in_stock"]]
+
+    total_stock_value = sum(p["price"] * 10 for p in in_stock_products)
+
+    most_expensive = max(products, key=lambda x: x["price"])
+
+    return {
+        "total_products": total_products,
+        "in_stock_count": in_stock_count,
+        "out_of_stock_names": out_of_stock_names,
+        "total_stock_value": total_stock_value,
+        "most_expensive": {
+            "name": most_expensive["name"],
+            "price": most_expensive["price"]
+        }
+    }
 # Product by ID 
 @app.get('/products/{product_id}')
 def get_product(product_id: int):
@@ -403,4 +427,30 @@ def delete_product(product_id: int):
     return {
         "message": "Product deleted successfully",
         "deleted_product": product
+    }
+#apply discount to a category
+@app.put("/products/discount")
+def apply_discount(category: str = Query(...), discount_percent: int = Query(..., ge=1, le=99)):
+
+    discounted_products = []
+
+    for product in products:
+        if product["category"].lower() == category.lower():
+            original_price = product["price"]
+            discount_amount = (original_price * discount_percent) // 100
+            new_price = original_price - discount_amount
+            product["price"] = new_price
+            discounted_products.append({
+                "name": product["name"],
+                "original_price": original_price,
+                "discounted_price": new_price
+            })
+
+    if not discounted_products:
+        return {"message": "No products found in this category"}
+
+    return {
+        "category": category,
+        "discount_percent": discount_percent,
+        "discounted_products": discounted_products
     }
