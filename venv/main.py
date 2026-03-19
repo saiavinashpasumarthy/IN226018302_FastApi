@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
@@ -453,4 +453,86 @@ def apply_discount(category: str = Query(...), discount_percent: int = Query(...
         "category": category,
         "discount_percent": discount_percent,
         "discounted_products": discounted_products
+    }
+#add products into cart
+cart_items = []
+
+@app.post("/cart/{product_id}")
+def add_to_cart(product_id: int, quantity: int = Query(..., ge=1)):
+
+    product = next((p for p in products if p["id"] == product_id), None)
+    subtotal = product["price"] * quantity
+
+    if product is None:
+        return {"error": "Product not found"}
+
+    if not product["in_stock"]:
+        raise HTTPException(status_code=400, detail=f'{product["name"]} is out of stock')
+    for item in cart_items:
+        if item["product_id"] == product_id:
+            #quantity must be updated and subtotal must be recalculated
+            item["quantity"] =quantity
+            item["subtotal"] = item["quantity"] * product["price"]
+            return {
+                "message": f'cart updated',
+                "subtotal": item["subtotal"]
+            }
+    cart_items.append({
+        "product_id": product_id,
+        "name": product["name"],
+        "quantity": quantity,
+        "subtotal": subtotal
+    })
+    return {
+        "message": f'Added {quantity} x {product["name"]} to cart',
+        "subtotal": subtotal
+    }
+@app.get("/cart")
+def view_cart():
+    total = sum(item["subtotal"] for item in cart_items)
+    return {
+        "cart_items": cart_items,
+        "total": total
+    }
+@app.delete("/cart/{product_id}")
+def remove_from_cart(product_id: int):
+    global cart_items
+    cart_items = [item for item in cart_items if item["product_id"] != product_id]
+    return {
+        "message": "Item removed from cart",
+        "cart_items": cart_items
+    }
+
+class CheckoutRequest(BaseModel):
+    customer_name:    str = Field(..., min_length=2)
+    delivery_address: str = Field(..., min_length=10)
+
+@app.post('/checkout')
+def checkout(checkout_data: CheckoutRequest, response: Response):
+    global order_counter
+    if not cart_items:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+        return {'error': 'Cart is empty'}
+    placed_orders = []
+    grand_total   = 0
+    for item in cart_items:
+        order = {
+            'order_id':         order_counter,
+            'customer_name':    checkout_data.customer_name,
+            'product':          item['name'],
+            'quantity':         item['quantity'],
+            'delivery_address': checkout_data.delivery_address,
+            'total_price':      item['subtotal'],
+            'status':           'confirmed',
+        }
+        orders.append(order)
+        placed_orders.append(order)
+        grand_total   += item['subtotal']
+        order_counter += 1
+    cart_items.clear()
+    response.status_code = status.HTTP_201_CREATED
+    return {
+        'message':       'Checkout successful',
+        'orders_placed': placed_orders,
+        'grand_total':   grand_total,
     }
